@@ -163,18 +163,6 @@ vector<vector<bool>> generate_graph(int n, double probability)
     return graph;
 }
 
-void print_graph(vector<vector<bool>> &graph)
-{
-    for (int i = 0; i < graph.size(); i++)
-    {
-        for (int j = 0; j < graph[i].size(); j++)
-        {
-            cout << graph[i][j] << " ";
-        }
-        cout << endl;
-    }
-}
-
 int main(int argc, char const *argv[])
 {
     string type = "c";
@@ -257,8 +245,6 @@ int main(int argc, char const *argv[])
         return EXIT_FAILURE;
     }
 
-    // print_graph(graph);
-
     chrono::time_point<chrono::system_clock> start, end;
     if (type[0] == 'c' || type[1] == 'c')
     {
@@ -279,6 +265,7 @@ int main(int argc, char const *argv[])
         printf("Time for sequential: %f\n", time_s.count());
         printf("Time for parallel: %f\n", time_p.count());
         printf("Number of hamiltonian cycles: %d\n", result_s);
+        // printf("%d,%f,%f\n", n, time_s.count(), time_p.count());
     }
     else if (type[0] == 's' || type[1] == 's')
     {
@@ -288,6 +275,7 @@ int main(int argc, char const *argv[])
         chrono::duration<double> time = end - start;
         printf("Time for sequential: %f\n", time.count());
         printf("Number of hamiltonian cycles: %d\n", result);
+        // printf("%d,%f\n", n, time.count());
     }
     else
     {
@@ -301,6 +289,7 @@ int main(int argc, char const *argv[])
         chrono::duration<double> time = end - start;
         printf("Time for parallel: %f\n", time.count());
         printf("Number of hamiltonian cycles: %d\n", result);
+        // printf("%d,%d,%f\n", n, level, time.count());
     }
 
     return EXIT_SUCCESS;
