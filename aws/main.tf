@@ -42,6 +42,6 @@ resource "aws_spot_instance_request" "cuda" {
   user_data = <<-EOF
               #!/bin/bash
               sudo yum update -y
-              printf 'export PATH="/usr/local/cuda/bin:$PATH"\nexport LD_LIBRARY_PATH="/usr/local/cuda/lib64:$LD_LIBRARY_PATH\n' >> /home/ec2-user/.bashrc
+              printf 'export PATH="/usr/local/cuda/bin:$PATH"\nexport LD_LIBRARY_PATH="/usr/local/cuda/lib64:$LD_LIBRARY_PATH"\n' >> /home/ec2-user/.bashrc
               EOF
 }
