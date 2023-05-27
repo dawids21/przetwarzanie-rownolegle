@@ -42,7 +42,7 @@ resource "aws_spot_instance_request" "cuda" {
   user_data = <<-EOF
               #!/bin/bash
               sudo yum update -y
-              sudo yum install -y ncurses-compat-libs
+              sudo yum install -y ncurses-compat-libs netpbm-progs
               printf 'export PATH="/usr/local/cuda/bin:$PATH"\nexport LD_LIBRARY_PATH="/usr/local/cuda/lib64:$LD_LIBRARY_PATH"\n' >> /home/ec2-user/.bashrc
               EOF
 }

@@ -3,8 +3,8 @@ CUDA_HOME := /usr/local/cuda
 NVCC := $(CUDA_HOME)/bin/nvcc
 NVCC_FLAGS := -g -G
 
-CUDA_TEST := main
-CUDA_TEST_SRC := main.cu
+CUDA_TEST := mandelbrot
+CUDA_TEST_SRC := mandelbrot.cu
 
 all: $(CUDA_TEST)
 
