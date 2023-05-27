@@ -29,7 +29,7 @@ data "aws_ami" "cuda" {
 
 resource "aws_key_pair" "cuda" {
   key_name   = "cuda"
-  public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDV9brHJCm7kD7yJ56DEjhU7sckMLa/wj3tWGuyhHjma0grspV6fyAgPaBzZq1RX0sujlgdIBR4b1i9fIUrcp4OcdZLaxdupJbUvew8BqwWgJnmjuwSvhrrHPdweJK5LIE82SYakM0ptBWpRzaRLGoz9P71ElVRIPtVYDAbHSrHrxy7jX5H+7ExTkKcUDYeGXaeAlzxNM6qDaoPI9APX2MbR/L6HzrwbfiUb6U8jLqJOYghCwwl8A6DjaTBBGqDMDcT5yjMF0Y39hNTfrYzxQ6V6Uq6+WEHLnE+WLUlblvwJtMhfsQvmFQybROsGY5clUa+6pW7V7TAHL8RuG7LufmpvgQK0ci2ummeIYGk6IZQHAl+9HFgnHDqe/ZpTFewnfeb2kpZIweogWpzouAjIuWmRXn2kuKggy1p45BbPnXOhyFGZlkJhoHO0iqrbWL5N8RWZ1JjviJrQo2QN5Iqo6q7hzbeCxAH2Ksvn+bgnZCGtBfjXejfOk+vKXxlBHMJh58= dawids@dawid-ms7d43"
+  public_key = var.public_key
 }
 
 resource "aws_spot_instance_request" "cuda" {
