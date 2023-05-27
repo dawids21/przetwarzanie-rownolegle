@@ -91,7 +91,7 @@ int find_hamiltonian_cycles_s(bool **graph, int n)
 
 #ifdef __NVCC__
 // I had to give up vectors and use arrays because of CUDA
-__device__ bool check_hamiltonian_cycle_r(bool **graph, int *path, int n)
+__device__ bool check_hamiltonian_cycle_r(bool *__restrict__ *__restrict__ graph, int *path, int n)
 {
     for (int i = 0; i < n - 1; i++)
     {
@@ -107,7 +107,7 @@ __device__ bool check_hamiltonian_cycle_r(bool **graph, int *path, int n)
     return true;
 }
 
-__device__ bool check_partial_hamiltonian_cycle_r(bool **graph, int *path, int position)
+__device__ bool check_partial_hamiltonian_cycle_r(bool *__restrict__ *__restrict__ graph, int *path, int position)
 {
     for (int i = 0; i < position - 1; i++)
     {
@@ -119,20 +119,21 @@ __device__ bool check_partial_hamiltonian_cycle_r(bool **graph, int *path, int p
     return true;
 }
 
-__device__ void find_hamiltonian_cycles_r(bool **graph, int *path, int position, int level, int *acc, int n, int num_of_threads, int *result)
+__device__ int find_hamiltonian_cycles_r(bool *__restrict__ *__restrict__ graph, int *path, int position, int level, int *acc, const int n, const int num_of_threads)
 {
     int thread_id = threadIdx.x;
+    int result = 0;
     if (position == n - 2)
     {
-        result[thread_id] += check_hamiltonian_cycle_r(graph, path, n);
+        result += check_hamiltonian_cycle_r(graph, path, n);
         swap(path[n - 2], path[n - 1]);
-        result[thread_id] += check_hamiltonian_cycle_r(graph, path, n);
+        result += check_hamiltonian_cycle_r(graph, path, n);
         swap(path[n - 2], path[n - 1]);
-        return;
+        return result;
     }
     // if (!check_partial_hamiltonian_cycle_r(graph, path, position))
     // {
-    //     return cycles;
+    //     return result;
     // }
     for (int i = position; i < n; i++)
     {
@@ -145,32 +146,28 @@ __device__ void find_hamiltonian_cycles_r(bool **graph, int *path, int position,
             (*acc)++;
             if ((*acc) % num_of_threads == thread_id)
             {
-                find_hamiltonian_cycles_r(graph, path, position + 1, level, acc, n, num_of_threads, result);
+                result += find_hamiltonian_cycles_r(graph, path, position + 1, level, acc, n, num_of_threads);
             }
         }
         else
         {
-            find_hamiltonian_cycles_r(graph, path, position + 1, level, acc, n, num_of_threads, result);
+            result += find_hamiltonian_cycles_r(graph, path, position + 1, level, acc, n, num_of_threads);
         }
         if (i != position)
         {
             swap(path[position], path[i]);
         }
     }
+    return result;
 }
 
-__global__ void find_hamiltonian_cycles_r(bool **graph, int level, int n, int *result, int num_of_threads)
+__global__ void find_hamiltonian_cycles_r(bool *__restrict__ *__restrict__ graph, int **paths, int level, const int n, int *results, const int num_of_threads)
 {
-    int *path = (int *)malloc(n * sizeof(int));
-    for (int i = 0; i < n; i++)
-    {
-        path[i] = i;
-    }
-    int *acc = (int *)malloc(sizeof(int));
-    *acc = 0;
-    find_hamiltonian_cycles_r(graph, path, 1, level, acc, n, num_of_threads, result);
-    free(path);
-    free(acc);
+    int thread_id = threadIdx.x;
+    int *path = paths[thread_id];
+    int acc = 0;
+    int thread_result = find_hamiltonian_cycles_r(graph, path, 1, level, &acc, n, num_of_threads);
+    results[thread_id] = thread_result;
 }
 #endif
 
@@ -211,7 +208,7 @@ int main(int argc, char const *argv[])
     int number_of_threads = 10;
     if (argc == 1)
     {
-        cout << "Usage: " << argv[0] << " [type] [n] ([probability]|[file]) [level]" << endl
+        cout << "Usage: " << argv[0] << " [type] [n] ([probability]|[file]) [level] [number_of_threads]" << endl
              << endl;
         cout << "type:" << endl;
         cout << "c - compare results (random), s - serial (random), p - parallel (random)" << endl;
@@ -305,49 +302,87 @@ int main(int argc, char const *argv[])
         chrono::duration<double> time_s = end - start;
 
         int result_p = 0;
+        chrono::time_point<chrono::system_clock> cuda_start, cuda_end;
         start = std::chrono::system_clock::now();
 #ifdef __NVCC__
-        int *result_arr = (int *)malloc(sizeof(int) * number_of_threads);
-        for (int i = 0; i < number_of_threads; i++)
-        {
-            result_arr[i] = 0;
-        }
-
         int *cuda_result;
         cudaMalloc((void **)&cuda_result, sizeof(int) * number_of_threads);
-        cudaMemcpy(cuda_result, result_arr, sizeof(int) * number_of_threads, cudaMemcpyHostToDevice);
+        cudaMemset(cuda_result, 0, sizeof(int) * number_of_threads);
 
-        bool **graph_arr = (bool **)malloc(sizeof(bool *) * n);
+        bool **graph_arr;
+        cudaMallocHost((void **)&graph_arr, sizeof(bool *) * n);
         for (int i = 0; i < n; i++)
         {
-            cudaMalloc((void **)&graph_arr[i], sizeof(bool) * n);
-            cudaMemcpy(graph_arr[i], graph[i], sizeof(bool) * n, cudaMemcpyHostToDevice);
+            cudaMallocHost((void **)&graph_arr[i], sizeof(bool) * n);
+            cudaMemcpy(graph_arr[i], graph[i], sizeof(bool) * n, cudaMemcpyHostToHost);
+        }
+        bool **cuda_dev_arr;
+        cudaMallocHost((void **)&cuda_dev_arr, sizeof(bool *) * n);
+        for (int i = 0; i < n; i++)
+        {
+            cudaMalloc((void **)&cuda_dev_arr[i], sizeof(bool) * n);
+            cudaMemcpy(cuda_dev_arr[i], graph_arr[i], sizeof(bool) * n, cudaMemcpyHostToDevice);
         }
         bool **cuda_graph;
         cudaMalloc((void **)&cuda_graph, sizeof(bool *) * n);
-        cudaMemcpy(cuda_graph, graph_arr, sizeof(bool *) * n, cudaMemcpyHostToDevice);
+        cudaMemcpy(cuda_graph, cuda_dev_arr, sizeof(bool *) * n, cudaMemcpyHostToDevice);
+
+        int *initial_path;
+        cudaMallocHost((void **)&initial_path, sizeof(int) * n);
+        for (int i = 0; i < n; i++)
+        {
+            initial_path[i] = i;
+        }
+        int **cuda_dev_paths_arr;
+        cudaMallocHost((void **)&cuda_dev_paths_arr, sizeof(int *) * number_of_threads);
+        for (int i = 0; i < number_of_threads; i++)
+        {
+            cudaMalloc((void **)&cuda_dev_paths_arr[i], sizeof(int) * n);
+            cudaMemcpy(cuda_dev_paths_arr[i], initial_path, sizeof(int) * n, cudaMemcpyHostToDevice);
+        }
+        int **cuda_paths;
+        cudaMalloc((void **)&cuda_paths, sizeof(int *) * number_of_threads);
+        cudaMemcpy(cuda_paths, cuda_dev_paths_arr, sizeof(int *) * number_of_threads, cudaMemcpyHostToDevice);
+        cuda_start = std::chrono::system_clock::now();
 #endif
 
 #ifdef __NVCC__
-        find_hamiltonian_cycles_r<<<1, number_of_threads>>>(cuda_graph, level, n, cuda_result, number_of_threads);
+        find_hamiltonian_cycles_r<<<1, number_of_threads>>>(cuda_graph, cuda_paths, level, n, cuda_result, number_of_threads);
+        cudaDeviceSynchronize();
 #else
         result_p = find_hamiltonian_cycles_s(graph, n);
 #endif
 
 #ifdef __NVCC__
-        cudaMemcpy(result_arr, cuda_result, sizeof(int) * number_of_threads, cudaMemcpyDeviceToHost);
-        for (int i = 0; i < n; i++)
+        cuda_end = std::chrono::system_clock::now();
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess)
         {
-            cudaFree(graph_arr[i]);
+            fprintf(stderr, "Blad: %s\n", cudaGetErrorString(err));
+            return EXIT_FAILURE;
         }
-        cudaFree(cuda_graph);
-        cudaFree(cuda_result);
+
+        int *result_arr;
+        cudaMallocHost((void **)&result_arr, sizeof(int) * number_of_threads);
+        cudaMemcpy(result_arr, cuda_result, sizeof(int) * number_of_threads, cudaMemcpyDeviceToHost);
         for (int i = 0; i < number_of_threads; i++)
         {
             result_p += result_arr[i];
         }
-        free(graph_arr);
-        free(result_arr);
+        cudaFreeHost(result_arr);
+        cudaFree(cuda_result);
+
+        for (int i = 0; i < n; i++)
+        {
+            cudaFree(cuda_dev_arr[i]);
+        }
+        cudaFree(cuda_graph);
+        cudaFreeHost(cuda_dev_arr);
+        for (int i = 0; i < n; i++)
+        {
+            cudaFreeHost(graph_arr[i]);
+        }
+        cudaFreeHost(graph_arr);
 #endif
         end = std::chrono::system_clock::now();
         chrono::duration<double> time_p = end - start;
@@ -380,63 +415,94 @@ int main(int argc, char const *argv[])
     else
     {
         int result = 0;
-        // TODO use cudaMallocHost and cudaFreeHost https://stackoverflow.com/questions/7430003/cudamemcpy-too-slow
         start = std::chrono::system_clock::now();
+        chrono::time_point<chrono::system_clock> cuda_start, cuda_end;
 #ifdef __NVCC__
-        int *result_arr = (int *)malloc(sizeof(int) * number_of_threads);
-        // for (int i = 0; i < number_of_threads; i++)
-        // {
-        //     result_arr[i] = 0;
-        // }
-
         int *cuda_result;
         cudaMalloc((void **)&cuda_result, sizeof(int) * number_of_threads);
-        // TODO line below is needed, could use cudaMemset https://stackoverflow.com/questions/62055890/does-cudamalloc-initialize-the-array-to-0
-        // cudaMemcpy(cuda_result, result_arr, sizeof(int) * number_of_threads, cudaMemcpyHostToDevice);
+        cudaMemset(cuda_result, 0, sizeof(int) * number_of_threads);
 
-        bool **graph_arr = (bool **)malloc(sizeof(bool *) * n);
+        bool **graph_arr;
+        cudaMallocHost((void **)&graph_arr, sizeof(bool *) * n);
         for (int i = 0; i < n; i++)
         {
-            cudaMalloc((void **)&graph_arr[i], sizeof(bool) * n);
-            cudaMemcpy(graph_arr[i], graph[i], sizeof(bool) * n, cudaMemcpyHostToDevice);
+            cudaMallocHost((void **)&graph_arr[i], sizeof(bool) * n);
+            cudaMemcpy(graph_arr[i], graph[i], sizeof(bool) * n, cudaMemcpyHostToHost);
+        }
+        bool **cuda_dev_arr;
+        cudaMallocHost((void **)&cuda_dev_arr, sizeof(bool *) * n);
+        for (int i = 0; i < n; i++)
+        {
+            cudaMalloc((void **)&cuda_dev_arr[i], sizeof(bool) * n);
+            cudaMemcpy(cuda_dev_arr[i], graph_arr[i], sizeof(bool) * n, cudaMemcpyHostToDevice);
         }
         bool **cuda_graph;
         cudaMalloc((void **)&cuda_graph, sizeof(bool *) * n);
-        cudaMemcpy(cuda_graph, graph_arr, sizeof(bool *) * n, cudaMemcpyHostToDevice);
+        cudaMemcpy(cuda_graph, cuda_dev_arr, sizeof(bool *) * n, cudaMemcpyHostToDevice);
+
+        int *initial_path;
+        cudaMallocHost((void **)&initial_path, sizeof(int) * n);
+        for (int i = 0; i < n; i++)
+        {
+            initial_path[i] = i;
+        }
+        int **cuda_dev_paths_arr;
+        cudaMallocHost((void **)&cuda_dev_paths_arr, sizeof(int *) * number_of_threads);
+        for (int i = 0; i < number_of_threads; i++)
+        {
+            cudaMalloc((void **)&cuda_dev_paths_arr[i], sizeof(int) * n);
+            cudaMemcpy(cuda_dev_paths_arr[i], initial_path, sizeof(int) * n, cudaMemcpyHostToDevice);
+        }
+        int **cuda_paths;
+        cudaMalloc((void **)&cuda_paths, sizeof(int *) * number_of_threads);
+        cudaMemcpy(cuda_paths, cuda_dev_paths_arr, sizeof(int *) * number_of_threads, cudaMemcpyHostToDevice);
+        cuda_start = std::chrono::system_clock::now();
 #endif
 
-        start = std::chrono::system_clock::now();
 #ifdef __NVCC__
-        find_hamiltonian_cycles_r<<<1, number_of_threads>>>(cuda_graph, level, n, cuda_result, number_of_threads);
+        find_hamiltonian_cycles_r<<<1, number_of_threads>>>(cuda_graph, cuda_paths, level, n, cuda_result, number_of_threads);
+        cudaDeviceSynchronize();
 #else
         result = find_hamiltonian_cycles_s(graph, n);
 #endif
 
 #ifdef __NVCC__
+        cuda_end = std::chrono::system_clock::now();
         cudaError_t err = cudaGetLastError();
         if (err != cudaSuccess)
         {
             fprintf(stderr, "Blad: %s\n", cudaGetErrorString(err));
             return EXIT_FAILURE;
         }
+
+        int *result_arr;
+        cudaMallocHost((void **)&result_arr, sizeof(int) * number_of_threads);
         cudaMemcpy(result_arr, cuda_result, sizeof(int) * number_of_threads, cudaMemcpyDeviceToHost);
-        for (int i = 0; i < n; i++)
-        {
-            cudaFree(graph_arr[i]);
-        }
-        cudaFree(cuda_graph);
-        cudaFree(cuda_result);
         for (int i = 0; i < number_of_threads; i++)
         {
             result += result_arr[i];
         }
-        free(graph_arr);
-        free(result_arr);
+        cudaFreeHost(result_arr);
+        cudaFree(cuda_result);
+
+        for (int i = 0; i < n; i++)
+        {
+            cudaFree(cuda_dev_arr[i]);
+        }
+        cudaFree(cuda_graph);
+        cudaFreeHost(cuda_dev_arr);
+        for (int i = 0; i < n; i++)
+        {
+            cudaFreeHost(graph_arr[i]);
+        }
+        cudaFreeHost(graph_arr);
 #endif
         end = std::chrono::system_clock::now();
         chrono::duration<double> time = end - start;
         free_graph(graph, n);
         printf("Time for parallel: %f\n", time.count());
+        chrono::duration<double> cuda_time = cuda_end - cuda_start;
+        printf("Time for parallel kernel: %f\n", cuda_time.count());
         printf("Number of hamiltonian cycles: %d\n", result);
         // printf("%d,%d,%f\n", n, level, time.count());
     }
