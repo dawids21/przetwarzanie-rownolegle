@@ -15,7 +15,7 @@
 #define MAX_X 2
 #define MIN_Y -2
 #define MAX_Y 2
-#define MAX_COLOR 255
+#define MAX_COLOR 65535
 
 using namespace std;
 
@@ -29,7 +29,7 @@ void generate_ppm(const int *pixels, int width, int height, string filename)
     }
 
     ppm_file << "P3" << endl;
-    ppm_file << width << " " << height << " 255" << endl;
+    ppm_file << width << " " << height << " " << MAX_COLOR << endl;
 
     for (int i = 0; i < width * height; ++i)
     {
@@ -63,7 +63,7 @@ void calculate_mandelbrot_set_s(int width, int height, int max_iteration, int *m
             float y = (float)MIN_Y + j * dy;
             complex<float> c(x, y);
             int iterations = calculate_mandelbrot_s(c, max_iteration);
-            mandelbrot_set[j * height + i] = MAX_COLOR - (MAX_COLOR * iterations / max_iteration);
+            mandelbrot_set[j * height + i] = MAX_COLOR - ((MAX_COLOR * iterations) / max_iteration);
         }
     }
 }
@@ -92,7 +92,7 @@ __global__ void calculate_mandelbrot_set_r(int width, int height, int max_iterat
         float y = (float)MIN_Y + (float)j * (MAX_Y - MIN_Y) / height;
         cuComplex c = make_cuComplex(x, y);
         int iterations = calculate_mandelbrot_r(c, max_iteration);
-        mandelbrot_set[j * height + i] = MAX_COLOR - (MAX_COLOR * iterations / max_iteration);
+        mandelbrot_set[j * height + i] = MAX_COLOR - ((MAX_COLOR * iterations) / max_iteration);
     }
 }
 #endif
