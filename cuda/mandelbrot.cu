@@ -15,8 +15,7 @@
 #define MAX_X 2
 #define MIN_Y -2
 #define MAX_Y 2
-#define MAX_COLOR 65535
-
+#define MAX_COLOR 3 * 255
 using namespace std;
 
 void generate_ppm(const int *pixels, int width, int height, string filename)
@@ -33,7 +32,19 @@ void generate_ppm(const int *pixels, int width, int height, string filename)
 
     for (int i = 0; i < width * height; ++i)
     {
-        ppm_file << "0 0 " << pixels[i] << endl;
+        int pixel = pixels[i];
+        if (pixel <= 255)
+        {
+            ppm_file << pixel << " 0 0 " << endl;
+        }
+        else if (pixel <= 510)
+        {
+            ppm_file << "0 " << pixel - 255 << " 0 " << endl;
+        }
+        else
+        {
+            ppm_file << "0 0 " << pixel - 510 << " " << endl;
+        }
     }
 
     ppm_file.close();
